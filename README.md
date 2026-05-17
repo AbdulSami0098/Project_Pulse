@@ -150,4 +150,3 @@ project-pulse/
 │       └── App.tsx
 └── docker-compose.yml
 ```
-test
