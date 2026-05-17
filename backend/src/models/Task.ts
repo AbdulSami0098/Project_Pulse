@@ -48,6 +48,19 @@ export const MOCK_TASKS: Task[] = [
   { id: 'mock-8', title: 'Deploy to staging env', status: 'done', assignee: 'Henry', project_id: 1 },
 ];
 
+function rowsToTasks(rows: { id: number; project_id: number; payload: Record<string, string> }[]): Task[] {
+  return rows.map((row) => {
+    const rawStatus = (row.payload.status ?? '').toLowerCase();
+    return {
+      id: String(row.id),
+      title: row.payload.summary ?? row.payload.issue_key,
+      status: STATUS_MAP[rawStatus] ?? 'in_progress',
+      assignee: row.payload.assignee,
+      project_id: row.project_id,
+    };
+  });
+}
+
 export const getTasksFromEvents = async (): Promise<Task[]> => {
   const result = await pool.query<{
     id: number;
@@ -63,18 +76,28 @@ export const getTasksFromEvents = async (): Promise<Task[]> => {
   `);
 
   if (result.rows.length === 0) return MOCK_TASKS;
+  return rowsToTasks(result.rows);
+};
 
-  return result.rows.map((row) => {
-    const rawStatus = (row.payload.status ?? '').toLowerCase();
-    const status: Task['status'] = STATUS_MAP[rawStatus] ?? 'in_progress';
-    return {
-      id: String(row.id),
-      title: row.payload.summary ?? row.payload.issue_key,
-      status,
-      assignee: row.payload.assignee,
-      project_id: row.project_id,
-    };
-  });
+export const getTasksFromEventsByProject = async (projectId: number): Promise<Task[]> => {
+  const result = await pool.query<{
+    id: number;
+    project_id: number;
+    payload: Record<string, string>;
+  }>(`
+    SELECT DISTINCT ON (payload->>'issue_key')
+      id, project_id, payload
+    FROM events
+    WHERE type = 'jira_issue'
+      AND project_id = $1
+      AND payload->>'issue_key' IS NOT NULL
+    ORDER BY payload->>'issue_key', created_at DESC
+  `, [projectId]);
+
+  if (result.rows.length === 0) {
+    return MOCK_TASKS.map(t => ({ ...t, project_id: projectId }));
+  }
+  return rowsToTasks(result.rows);
 };
 
 export const getAlertsSummary = async (): Promise<AlertsSummary> => {
@@ -83,6 +106,25 @@ export const getAlertsSummary = async (): Promise<AlertsSummary> => {
     FROM alerts
     GROUP BY severity
   `);
+
+  const summary: AlertsSummary = { total: 0, high: 0, medium: 0, low: 0 };
+  for (const row of result.rows) {
+    const count = row.count as unknown as number;
+    if (row.severity === 'high' || row.severity === 'medium' || row.severity === 'low') {
+      summary[row.severity] = count;
+    }
+    summary.total += count;
+  }
+  return summary;
+};
+
+export const getAlertsSummaryByProject = async (projectId: number): Promise<AlertsSummary> => {
+  const result = await pool.query<{ severity: string; count: string }>(`
+    SELECT severity, COUNT(*)::int AS count
+    FROM alerts
+    WHERE project_id = $1
+    GROUP BY severity
+  `, [projectId]);
 
   const summary: AlertsSummary = { total: 0, high: 0, medium: 0, low: 0 };
   for (const row of result.rows) {

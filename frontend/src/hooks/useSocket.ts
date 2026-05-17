@@ -12,7 +12,7 @@ async function apiFetch<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export const useSocket = () => {
+export const useSocket = (projectId: number | null) => {
   const [connected, setConnected] = useState(false);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
@@ -21,69 +21,110 @@ export const useSocket = () => {
   const [analysis, setAnalysis] = useState<AnalysisUpdate | null>(null);
   const [alertsSummary, setAlertsSummary] = useState<AlertsSummary>(EMPTY_SUMMARY);
   const socketRef = useRef<Socket | null>(null);
+  const currentProjectRef = useRef<number | null>(null);
 
   useEffect(() => {
-    // Fire HTTP requests immediately so data shows before socket handshakes
-    apiFetch<Alert[]>('/api/alerts')
+    if (projectId === null) {
+      setAlerts([]);
+      setEvents([]);
+      setTasks([]);
+      setTasksLoading(false);
+      setAlertsSummary(EMPTY_SUMMARY);
+      setAnalysis(null);
+      return;
+    }
+
+    setTasksLoading(true);
+
+    apiFetch<Alert[]>(`/api/projects/${projectId}/alerts`)
       .then(setAlerts)
       .catch(() => {});
 
-    apiFetch<Task[]>('/api/projects/tasks')
+    apiFetch<Task[]>(`/api/projects/${projectId}/tasks`)
       .then((data) => { setTasks(data); setTasksLoading(false); })
       .catch(() => { setTasksLoading(false); });
 
-    apiFetch<AlertsSummary>('/api/alerts/summary')
+    apiFetch<AlertsSummary>(`/api/projects/${projectId}/alerts/summary`)
       .then(setAlertsSummary)
       .catch(() => {});
 
-    const socket = io(API_URL, { transports: ['websocket', 'polling'] });
-    socketRef.current = socket;
+    apiFetch<Event[]>(`/api/projects/${projectId}/events`)
+      .then(setEvents)
+      .catch(() => {});
 
-    socket.on('connect', () => setConnected(true));
-    socket.on('disconnect', () => setConnected(false));
+    let socket = socketRef.current;
 
-    // Replaces HTTP-fetched data with authoritative socket snapshot
-    socket.on('initial_data', ({ alerts: a, events: e, tasks: t }) => {
-      setAlerts(a);
-      setEvents(e);
-      if (t?.length) { setTasks(t); setTasksLoading(false); }
-    });
+    if (!socket) {
+      socket = io(API_URL, { transports: ['websocket', 'polling'] });
+      socketRef.current = socket;
 
-    socket.on('new_alert', (alert: Alert) => {
-      setAlerts((prev) => [alert, ...prev].slice(0, 100));
-      setAlertsSummary((prev) => ({
-        ...prev,
-        total: prev.total + 1,
-        [alert.severity]: prev[alert.severity] + 1,
-      }));
-    });
+      socket.on('connect', () => {
+        setConnected(true);
+        if (currentProjectRef.current !== null) {
+          socket!.emit('join_project', { project_id: currentProjectRef.current });
+        }
+      });
 
-    socket.on('alerts_refresh', (fresh: Alert[]) => {
-      setAlerts(fresh);
-      // Recompute summary from fresh list
-      const next = { ...EMPTY_SUMMARY };
-      for (const a of fresh) {
-        next[a.severity]++;
-        next.total++;
-      }
-      setAlertsSummary(next);
-    });
+      socket.on('disconnect', () => setConnected(false));
 
-    socket.on('analysis_update', (update: AnalysisUpdate) => {
-      setAnalysis(update);
-    });
+      socket.on('initial_data', ({ alerts: a, events: e, tasks: t }: {
+        alerts: Alert[]; events: Event[]; tasks: Task[];
+      }) => {
+        setAlerts(a);
+        setEvents(e);
+        if (t?.length) { setTasks(t); setTasksLoading(false); }
+      });
 
-    socket.on('tasks_update', (updated: Task[]) => {
-      setTasks(updated);
-    });
+      socket.on('new_alert', (alert: Alert) => {
+        setAlerts((prev) => [alert, ...prev].slice(0, 100));
+        setAlertsSummary((prev) => ({
+          ...prev,
+          total: prev.total + 1,
+          [alert.severity]: prev[alert.severity] + 1,
+        }));
+      });
+
+      socket.on('alerts_refresh', (fresh: Alert[]) => {
+        setAlerts(fresh);
+        const next = { ...EMPTY_SUMMARY };
+        for (const a of fresh) {
+          next[a.severity]++;
+          next.total++;
+        }
+        setAlertsSummary(next);
+      });
+
+      socket.on('analysis_update', (update: AnalysisUpdate) => {
+        setAnalysis(update);
+      });
+
+      socket.on('tasks_update', (updated: Task[]) => {
+        setTasks(updated);
+      });
+    }
+
+    // Switch to this project's room
+    currentProjectRef.current = projectId;
+    if (socket.connected) {
+      socket.emit('join_project', { project_id: projectId });
+    }
 
     return () => {
-      socket.disconnect();
+      // Don't disconnect the socket on project change — just leave old room implicitly
+      // (server handles room switching in join_project handler)
+    };
+  }, [projectId]);
+
+  // Disconnect socket on unmount
+  useEffect(() => {
+    return () => {
+      socketRef.current?.disconnect();
+      socketRef.current = null;
     };
   }, []);
 
   const requestAnalysis = useCallback(() => {
-    socketRef.current?.emit('request_analysis');
+    socketRef.current?.emit('request_analysis', { project_id: currentProjectRef.current });
   }, []);
 
   return { connected, alerts, events, tasks, tasksLoading, analysis, alertsSummary, requestAnalysis };

@@ -8,6 +8,8 @@ import { initDB } from './db/postgres';
 import githubRouter from './routes/github';
 import jiraRouter from './routes/jira';
 import slackRouter from './routes/slack';
+import projectsRouter from './routes/projects';
+import projectWebhooksRouter from './routes/projectWebhooks';
 import { initSocketHandlers } from './socket/socketHandler';
 import { initAlertService } from './services/alertService';
 import { getRecentAlerts } from './models/Alert';
@@ -26,6 +28,13 @@ const io = new Server(httpServer, {
 app.use(cors({ origin: frontendUrl }));
 app.use(express.json());
 
+// Per-project webhook routes
+app.use('/api/projects/:id/webhooks', projectWebhooksRouter);
+
+// Per-project CRUD + data routes
+app.use('/api/projects', projectsRouter);
+
+// Legacy webhook routes (kept for backward compatibility)
 app.use('/api/github', githubRouter);
 app.use('/api/jira', jiraRouter);
 app.use('/api/slack', slackRouter);
@@ -34,6 +43,7 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Legacy global endpoints (kept for backward compatibility)
 app.get('/api/alerts', async (_req, res) => {
   try {
     const alerts = await getRecentAlerts(20);
@@ -52,21 +62,22 @@ app.get('/api/events', async (_req, res) => {
   }
 });
 
-app.get('/api/projects/tasks', async (_req, res) => {
-  try {
-    const tasks = await getTasksFromEvents();
-    res.json(tasks);
-  } catch {
-    res.status(500).json({ error: 'Failed to fetch tasks' });
-  }
-});
-
 app.get('/api/alerts/summary', async (_req, res) => {
   try {
     const summary = await getAlertsSummary();
     res.json(summary);
   } catch {
     res.status(500).json({ error: 'Failed to fetch alerts summary' });
+  }
+});
+
+// Legacy tasks endpoint — now superseded by /api/projects/:id/tasks
+app.get('/api/tasks', async (_req, res) => {
+  try {
+    const tasks = await getTasksFromEvents();
+    res.json(tasks);
+  } catch {
+    res.status(500).json({ error: 'Failed to fetch tasks' });
   }
 });
 

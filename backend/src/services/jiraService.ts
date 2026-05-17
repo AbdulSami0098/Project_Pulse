@@ -1,9 +1,9 @@
 import { createEvent } from '../models/Event';
 import { getOrCreateProject } from '../models/Project';
-import { getTasksFromEvents } from '../models/Task';
-import { broadcastEvent } from './alertService';
+import { getTasksFromEventsByProject } from '../models/Task';
+import { broadcastToProject } from './alertService';
 
-export const handleIssueEvent = async (payload: Record<string, unknown>) => {
+export const handleIssueEvent = async (payload: Record<string, unknown>, projectId?: number) => {
   const issue = payload.issue as Record<string, unknown> | undefined;
   const fields = issue?.fields as Record<string, unknown> | undefined;
   const project = fields?.project as Record<string, unknown> | undefined;
@@ -11,12 +11,12 @@ export const handleIssueEvent = async (payload: Record<string, unknown>) => {
   const assignee = fields?.assignee as Record<string, unknown> | undefined;
 
   const projectKey = (project?.key as string) ?? 'UNKNOWN';
-  const projectId = await getOrCreateProject(projectKey);
+  const pid = projectId ?? await getOrCreateProject(projectKey);
 
   const changelog = payload.changelog as Record<string, unknown> | undefined;
   const changelogItems = changelog?.items as Record<string, unknown>[] | undefined;
 
-  const event = await createEvent(projectId, 'jira_issue', 'jira', {
+  const event = await createEvent(pid, 'jira_issue', 'jira', {
     issue_key: issue?.key,
     summary: fields?.summary,
     status: status?.name,
@@ -29,9 +29,8 @@ export const handleIssueEvent = async (payload: Record<string, unknown>) => {
     })),
   });
 
-  // Broadcast refreshed task list to all connected clients
-  const tasks = await getTasksFromEvents();
-  broadcastEvent('tasks_update', tasks);
+  const tasks = await getTasksFromEventsByProject(pid);
+  broadcastToProject(pid, 'tasks_update', tasks);
 
   return event;
 };

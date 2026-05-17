@@ -1,14 +1,27 @@
 export interface Project {
   id: number;
   name: string;
+  slug: string | null;
+  description: string | null;
+  github_repo: string | null;
+  jira_url: string | null;
+  slack_webhook: string | null;
+  teams_webhook: string | null;
+  status: 'active' | 'inactive';
   created_at: string;
+  integrations?: {
+    github: boolean;
+    jira: boolean;
+    slack: boolean;
+    teams: boolean;
+  };
 }
 
 export interface Event {
   id: number;
   project_id: number;
   type: string;
-  source: 'github' | 'jira' | 'slack';
+  source: 'github' | 'jira' | 'slack' | 'teams';
   payload: Record<string, unknown>;
   created_at: string;
 }

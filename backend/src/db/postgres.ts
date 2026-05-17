@@ -13,6 +13,13 @@ export const initDB = async (): Promise<void> => {
     CREATE TABLE IF NOT EXISTS projects (
       id SERIAL PRIMARY KEY,
       name VARCHAR(255) NOT NULL UNIQUE,
+      slug VARCHAR(255),
+      description TEXT,
+      github_repo VARCHAR(255),
+      jira_url VARCHAR(255),
+      slack_webhook VARCHAR(255),
+      teams_webhook VARCHAR(255),
+      status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
       created_at TIMESTAMP DEFAULT NOW()
     );
 
@@ -36,8 +43,24 @@ export const initDB = async (): Promise<void> => {
 
     CREATE INDEX IF NOT EXISTS idx_events_project_id ON events(project_id);
     CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
     CREATE INDEX IF NOT EXISTS idx_alerts_project_id ON alerts(project_id);
     CREATE INDEX IF NOT EXISTS idx_alerts_created_at ON alerts(created_at DESC);
+  `);
+
+  // Migrations for existing installations
+  await pool.query(`
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS slug VARCHAR(255);
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS description TEXT;
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS github_repo VARCHAR(255);
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS jira_url VARCHAR(255);
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS slack_webhook VARCHAR(255);
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS teams_webhook VARCHAR(255);
+    ALTER TABLE projects ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active';
+  `);
+
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_slug ON projects(slug) WHERE slug IS NOT NULL;
   `);
 
   console.log('Database schema initialized');
