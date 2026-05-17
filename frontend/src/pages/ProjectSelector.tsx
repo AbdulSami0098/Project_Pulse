@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Zap, Plus, CheckCircle, XCircle, X, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useProjectContext, CreateProjectInput } from '../contexts/ProjectContext';
 import type { Project } from '../types';
@@ -196,6 +196,13 @@ const Spinner = () => (
 
 export const ProjectSelector = () => {
   const { projects, selectProject, loading, error, refreshProjects } = useProjectContext();
+
+  // refreshProjects is stable (useCallback with [] deps) so this runs exactly
+  // once per mount — guaranteeing a fresh fetch whenever the selector is shown.
+  useEffect(() => {
+    refreshProjects();
+  }, [refreshProjects]);
+
   const [showCreate, setShowCreate] = useState(false);
   const [createdProject, setCreatedProject] = useState<Project | null>(null);
 

@@ -7,7 +7,9 @@ const API_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:3001';
 const EMPTY_SUMMARY: AlertsSummary = { total: 0, high: 0, medium: 0, low: 0 };
 
 async function apiFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`);
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: { 'ngrok-skip-browser-warning': '1' },
+  });
   if (!res.ok) throw new Error(`${path} → ${res.status}`);
   return res.json() as Promise<T>;
 }
@@ -70,8 +72,13 @@ export const useSocket = (projectId: number | null) => {
       socket.on('initial_data', ({ alerts: a, events: e, tasks: t }: {
         alerts: Alert[]; events: Event[]; tasks: Task[];
       }) => {
-        setAlerts(a);
-        setEvents(e);
+        // HTTP fetch is the source of truth for the initial load.
+        // Only let socket data overwrite state when it actually contains records —
+        // the legacy global initial_data fires immediately on connect (before
+        // join_project) and may carry an empty or wrong-project array that would
+        // flash the HTTP results away.
+        if (a?.length) setAlerts(a);
+        if (e?.length) setEvents(e);
         if (t?.length) { setTasks(t); setTasksLoading(false); }
       });
 

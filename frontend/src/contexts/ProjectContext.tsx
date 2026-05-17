@@ -3,7 +3,6 @@ import type { Project } from '../types';
 
 const API_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:3001';
 
-// Bypass ngrok's browser-warning interstitial for API calls
 const FETCH_HEADERS: HeadersInit = {
   'ngrok-skip-browser-warning': '1',
 };
@@ -45,42 +44,72 @@ const ProjectContext = createContext<ProjectContextValue>({
 
 const STORAGE_KEY = 'project_pulse_selected_project_id';
 
+async function fetchProjectList(): Promise<Project[]> {
+  const res = await fetch(`${API_URL}/api/projects`, { headers: FETCH_HEADERS });
+  if (!res.ok) throw new Error(`Server returned ${res.status}`);
+  return res.json() as Promise<Project[]>;
+}
+
+function reconcileStoredProject(
+  data: Project[],
+  setSelectedProject: React.Dispatch<React.SetStateAction<Project | null>>
+) {
+  const savedId = localStorage.getItem(STORAGE_KEY);
+  if (!savedId) return;
+  const found = data.find((p) => p.id === parseInt(savedId));
+  if (found) {
+    setSelectedProject(found);
+  } else {
+    // Stored project no longer exists — clear stale ref and show selector
+    localStorage.removeItem(STORAGE_KEY);
+    setSelectedProject(null);
+  }
+}
+
 export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchProjects = useCallback(async (): Promise<Project[]> => {
-    const res = await fetch(`${API_URL}/api/projects`, { headers: FETCH_HEADERS });
-    if (!res.ok) throw new Error(`Server returned ${res.status}`);
-    return res.json() as Promise<Project[]>;
-  }, []);
+  // Initial load — runs exactly once on mount via empty deps.
+  // A cancellation flag prevents state updates after unmount (React StrictMode safe).
+  useEffect(() => {
+    let cancelled = false;
 
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await fetchProjectList();
+        if (cancelled) return;
+        setProjects(data);
+        reconcileStoredProject(data, setSelectedProject);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load projects');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    load();
+    return () => { cancelled = true; };
+  }, []); // intentionally empty — one-time mount fetch
+
+  // Manual refresh (called by ProjectSelector on mount and by retry button).
+  // Stable identity via empty deps — safe to pass as a useEffect dependency.
   const refreshProjects = useCallback(async () => {
     setError(null);
     try {
-      const data = await fetchProjects();
+      const data = await fetchProjectList();
       setProjects(data);
-
-      const savedId = localStorage.getItem(STORAGE_KEY);
-      if (savedId) {
-        const found = data.find((p) => p.id === parseInt(savedId));
-        if (found) setSelectedProject(found);
-      }
+      reconcileStoredProject(data, setSelectedProject);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load projects');
     }
-  }, [fetchProjects]);
-
-  useEffect(() => {
-    const init = async () => {
-      setLoading(true);
-      await refreshProjects();
-      setLoading(false);
-    };
-    init();
-  }, [refreshProjects]);
+  }, []);
 
   const selectProject = useCallback((project: Project) => {
     setSelectedProject(project);
