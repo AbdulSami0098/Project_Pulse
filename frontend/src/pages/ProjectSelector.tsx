@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Zap, Plus, CheckCircle, XCircle, X } from 'lucide-react';
+import { Zap, Plus, CheckCircle, XCircle, X, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useProjectContext, CreateProjectInput } from '../contexts/ProjectContext';
 import type { Project } from '../types';
 
@@ -7,6 +7,8 @@ function getBackendUrl(): string {
   if (import.meta.env.VITE_BACKEND_URL) return import.meta.env.VITE_BACKEND_URL as string;
   return `${window.location.protocol}//${window.location.hostname}:3001`;
 }
+
+// ── Webhook URL modal shown after project creation ──────────────────────────
 
 interface WebhookUrlsProps {
   project: Project;
@@ -71,6 +73,8 @@ const WebhookUrls = ({ project, onClose }: WebhookUrlsProps) => {
   );
 };
 
+// ── Create project form modal ────────────────────────────────────────────────
+
 interface CreateProjectFormProps {
   onClose: () => void;
   onCreated: (project: Project) => void;
@@ -79,14 +83,14 @@ interface CreateProjectFormProps {
 const CreateProjectForm = ({ onClose, onCreated }: CreateProjectFormProps) => {
   const { createProject, selectProject } = useProjectContext();
   const [form, setForm] = useState<CreateProjectInput>({ name: '', description: '', teams_webhook: '' });
-  const [error, setError] = useState('');
+  const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim()) { setError('Project name is required'); return; }
+    if (!form.name.trim()) { setFormError('Project name is required'); return; }
     setSaving(true);
-    setError('');
+    setFormError('');
     try {
       const project = await createProject({
         name: form.name.trim(),
@@ -96,7 +100,7 @@ const CreateProjectForm = ({ onClose, onCreated }: CreateProjectFormProps) => {
       selectProject(project);
       onCreated(project);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create project');
+      setFormError(err instanceof Error ? err.message : 'Failed to create project');
     } finally {
       setSaving(false);
     }
@@ -133,7 +137,9 @@ const CreateProjectForm = ({ onClose, onCreated }: CreateProjectFormProps) => {
             />
           </div>
           <div>
-            <label className="block text-gray-400 text-sm mb-1.5">MS Teams Webhook URL <span className="text-gray-600">(optional)</span></label>
+            <label className="block text-gray-400 text-sm mb-1.5">
+              MS Teams Webhook URL <span className="text-gray-600">(optional)</span>
+            </label>
             <input
               type="url"
               value={form.teams_webhook}
@@ -141,9 +147,11 @@ const CreateProjectForm = ({ onClose, onCreated }: CreateProjectFormProps) => {
               placeholder="https://your-org.webhook.office.com/..."
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 placeholder-gray-600"
             />
-            <p className="text-gray-600 text-xs mt-1">In MS Teams: channel → Connectors → Incoming Webhook → copy URL</p>
+            <p className="text-gray-600 text-xs mt-1">
+              In MS Teams: channel → Connectors → Incoming Webhook → copy URL
+            </p>
           </div>
-          {error && <p className="text-red-400 text-sm">{error}</p>}
+          {formError && <p className="text-red-400 text-sm">{formError}</p>}
           <div className="flex gap-3 pt-2">
             <button
               type="button"
@@ -166,6 +174,8 @@ const CreateProjectForm = ({ onClose, onCreated }: CreateProjectFormProps) => {
   );
 };
 
+// ── Integration status badge ─────────────────────────────────────────────────
+
 const IntegrationBadge = ({ connected }: { connected: boolean }) =>
   connected ? (
     <CheckCircle className="w-3.5 h-3.5 text-green-400" />
@@ -173,8 +183,19 @@ const IntegrationBadge = ({ connected }: { connected: boolean }) =>
     <XCircle className="w-3.5 h-3.5 text-gray-600" />
   );
 
+// ── Loading spinner ──────────────────────────────────────────────────────────
+
+const Spinner = () => (
+  <div className="flex flex-col items-center gap-3 py-12">
+    <div className="w-8 h-8 border-2 border-gray-700 border-t-blue-500 rounded-full animate-spin" />
+    <p className="text-gray-500 text-sm">Loading projects...</p>
+  </div>
+);
+
+// ── Main page ────────────────────────────────────────────────────────────────
+
 export const ProjectSelector = () => {
-  const { projects, selectProject, loading } = useProjectContext();
+  const { projects, selectProject, loading, error, refreshProjects } = useProjectContext();
   const [showCreate, setShowCreate] = useState(false);
   const [createdProject, setCreatedProject] = useState<Project | null>(null);
 
@@ -185,14 +206,102 @@ export const ProjectSelector = () => {
 
   const handleWebhookClose = () => {
     setCreatedProject(null);
-    // Project is already selected by the form handler
+  };
+
+  const renderContent = () => {
+    if (loading) return <Spinner />;
+
+    if (error) {
+      return (
+        <div className="flex flex-col items-center gap-4 py-12 text-center">
+          <div className="w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center">
+            <AlertTriangle className="w-6 h-6 text-red-400" />
+          </div>
+          <div>
+            <p className="text-white font-medium">Could not reach backend</p>
+            <p className="text-gray-500 text-sm mt-1">{error}</p>
+            <p className="text-gray-600 text-xs mt-1">
+              Make sure the backend is running at{' '}
+              <code className="text-gray-400">{import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:3001'}</code>
+            </p>
+          </div>
+          <button
+            onClick={() => refreshProjects()}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg text-sm transition-colors"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Try again
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        {projects.length > 0 && (
+          <div className="space-y-3 mb-6">
+            {projects.map((project) => (
+              <button
+                key={project.id}
+                onClick={() => selectProject(project)}
+                className="w-full bg-gray-900 border border-gray-800 hover:border-gray-600 rounded-xl p-5 text-left transition-colors group"
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-white font-semibold group-hover:text-blue-400 transition-colors">
+                      {project.name}
+                    </h3>
+                    {project.description && (
+                      <p className="text-gray-500 text-sm mt-1">{project.description}</p>
+                    )}
+                  </div>
+                  <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
+                    project.status === 'active'
+                      ? 'bg-green-500/10 text-green-400'
+                      : 'bg-gray-800 text-gray-500'
+                  }`}>
+                    {project.status}
+                  </span>
+                </div>
+                {project.integrations && (
+                  <div className="flex items-center gap-4 mt-3">
+                    {(['github', 'jira', 'slack', 'teams'] as const).map((key) => (
+                      <div key={key} className="flex items-center gap-1.5">
+                        <IntegrationBadge connected={!!project.integrations![key]} />
+                        <span className="text-gray-500 text-xs capitalize">{key}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <button
+          onClick={() => setShowCreate(true)}
+          className="w-full bg-gray-900 border border-dashed border-gray-700 hover:border-blue-500 rounded-xl p-5 text-center transition-colors group"
+        >
+          <div className="flex items-center justify-center gap-2 text-gray-500 group-hover:text-blue-400 transition-colors">
+            <Plus className="w-4 h-4" />
+            <span className="font-medium text-sm">Create New Project</span>
+          </div>
+        </button>
+
+        {projects.length === 0 && (
+          <p className="text-center text-gray-600 text-sm mt-4">
+            No projects yet — create your first one above
+          </p>
+        )}
+      </>
+    );
   };
 
   return (
     <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-2xl">
         <div className="text-center mb-10">
-          <div className="flex items-center justify-center gap-3 mb-4">
+          <div className="flex items-center justify-center mb-4">
             <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center">
               <Zap className="w-6 h-6 text-white" />
             </div>
@@ -201,72 +310,7 @@ export const ProjectSelector = () => {
           <p className="text-gray-500 mt-2">Select a project to get started</p>
         </div>
 
-        {loading ? (
-          <div className="text-center text-gray-600 py-10">Loading projects...</div>
-        ) : (
-          <>
-            {projects.length > 0 && (
-              <div className="space-y-3 mb-6">
-                {projects.map((project) => (
-                  <button
-                    key={project.id}
-                    onClick={() => selectProject(project)}
-                    className="w-full bg-gray-900 border border-gray-800 hover:border-gray-600 rounded-xl p-5 text-left transition-colors group"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="text-white font-semibold group-hover:text-blue-400 transition-colors">
-                          {project.name}
-                        </h3>
-                        {project.description && (
-                          <p className="text-gray-500 text-sm mt-1">{project.description}</p>
-                        )}
-                      </div>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        project.status === 'active'
-                          ? 'bg-green-500/10 text-green-400'
-                          : 'bg-gray-800 text-gray-500'
-                      }`}>
-                        {project.status}
-                      </span>
-                    </div>
-                    {project.integrations && (
-                      <div className="flex items-center gap-4 mt-3">
-                        {[
-                          { key: 'github', label: 'GitHub' },
-                          { key: 'jira', label: 'Jira' },
-                          { key: 'slack', label: 'Slack' },
-                          { key: 'teams', label: 'Teams' },
-                        ].map(({ key, label }) => (
-                          <div key={key} className="flex items-center gap-1.5">
-                            <IntegrationBadge connected={!!project.integrations![key as keyof typeof project.integrations]} />
-                            <span className="text-gray-500 text-xs">{label}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <button
-              onClick={() => setShowCreate(true)}
-              className="w-full bg-gray-900 border border-dashed border-gray-700 hover:border-blue-500 rounded-xl p-5 text-center transition-colors group"
-            >
-              <div className="flex items-center justify-center gap-2 text-gray-500 group-hover:text-blue-400 transition-colors">
-                <Plus className="w-4 h-4" />
-                <span className="font-medium text-sm">Create New Project</span>
-              </div>
-            </button>
-
-            {projects.length === 0 && !loading && (
-              <p className="text-center text-gray-600 text-sm mt-4">
-                No projects yet — create your first one above
-              </p>
-            )}
-          </>
-        )}
+        {renderContent()}
       </div>
 
       {showCreate && (

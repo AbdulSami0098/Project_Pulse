@@ -3,6 +3,11 @@ import type { Project } from '../types';
 
 const API_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:3001';
 
+// Bypass ngrok's browser-warning interstitial for API calls
+const FETCH_HEADERS: HeadersInit = {
+  'ngrok-skip-browser-warning': '1',
+};
+
 interface ProjectContextValue {
   projects: Project[];
   selectedProject: Project | null;
@@ -13,6 +18,7 @@ interface ProjectContextValue {
   updateProject: (id: number, data: Partial<CreateProjectInput & { status: 'active' | 'inactive' }>) => Promise<Project>;
   deleteProject: (id: number) => Promise<void>;
   loading: boolean;
+  error: string | null;
 }
 
 export interface CreateProjectInput {
@@ -34,6 +40,7 @@ const ProjectContext = createContext<ProjectContextValue>({
   updateProject: async () => { throw new Error('not ready'); },
   deleteProject: async () => {},
   loading: true,
+  error: null,
 });
 
 const STORAGE_KEY = 'project_pulse_selected_project_id';
@@ -42,14 +49,16 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchProjects = useCallback(async (): Promise<Project[]> => {
-    const res = await fetch(`${API_URL}/api/projects`);
-    if (!res.ok) throw new Error('Failed to fetch projects');
+    const res = await fetch(`${API_URL}/api/projects`, { headers: FETCH_HEADERS });
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
     return res.json() as Promise<Project[]>;
   }, []);
 
   const refreshProjects = useCallback(async () => {
+    setError(null);
     try {
       const data = await fetchProjects();
       setProjects(data);
@@ -59,8 +68,8 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
         const found = data.find((p) => p.id === parseInt(savedId));
         if (found) setSelectedProject(found);
       }
-    } catch {
-      // backend might not be running; keep empty
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load projects');
     }
   }, [fetchProjects]);
 
@@ -86,7 +95,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   const createProject = useCallback(async (data: CreateProjectInput): Promise<Project> => {
     const res = await fetch(`${API_URL}/api/projects`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...FETCH_HEADERS },
       body: JSON.stringify(data),
     });
     if (!res.ok) {
@@ -104,7 +113,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   ): Promise<Project> => {
     const res = await fetch(`${API_URL}/api/projects/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...FETCH_HEADERS },
       body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error('Failed to update project');
@@ -115,7 +124,10 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   }, [selectedProject]);
 
   const deleteProject = useCallback(async (id: number): Promise<void> => {
-    const res = await fetch(`${API_URL}/api/projects/${id}`, { method: 'DELETE' });
+    const res = await fetch(`${API_URL}/api/projects/${id}`, {
+      method: 'DELETE',
+      headers: FETCH_HEADERS,
+    });
     if (!res.ok) throw new Error('Failed to delete project');
     setProjects((prev) => prev.filter((p) => p.id !== id));
     if (selectedProject?.id === id) {
@@ -136,6 +148,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
         updateProject,
         deleteProject,
         loading,
+        error,
       }}
     >
       {children}
