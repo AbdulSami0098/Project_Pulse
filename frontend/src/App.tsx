@@ -4,6 +4,7 @@ import { Header } from './components/layout/Header';
 import { Dashboard } from './pages/Dashboard';
 import { DeveloperFeed } from './pages/DeveloperFeed';
 import { Settings } from './pages/Settings';
+import { Intelligence } from './pages/Intelligence';
 import { ProjectSelector } from './pages/ProjectSelector';
 import { AlertsFeed } from './components/dashboard/AlertsFeed';
 import { ProjectProvider, useProjectContext } from './contexts/ProjectContext';
@@ -52,6 +53,7 @@ const MainApp = () => {
                 </div>
               }
             />
+            <Route path="/intelligence" element={<Intelligence />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/projects" element={<ProjectSelector />} />
             <Route path="*" element={<Navigate to="/" replace />} />

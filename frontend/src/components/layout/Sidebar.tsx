@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Radio, Bell, Settings, Zap, ChevronDown, Plus, LogOut } from 'lucide-react';
+import { LayoutDashboard, Radio, Bell, Settings, Zap, ChevronDown, Plus, LogOut, Sparkles } from 'lucide-react';
 import { useProjectContext } from '../../contexts/ProjectContext';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/feed', label: 'Developer Feed', icon: Radio },
   { to: '/alerts', label: 'Alerts', icon: Bell },
+  { to: '/intelligence', label: 'Intelligence', icon: Sparkles },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 

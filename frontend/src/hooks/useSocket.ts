@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import type { Alert, Event, Task, AlertsSummary, AnalysisUpdate } from '../types';
 
-const API_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 
 const EMPTY_SUMMARY: AlertsSummary = { total: 0, high: 0, medium: 0, low: 0 };
 

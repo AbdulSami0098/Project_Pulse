@@ -3,6 +3,10 @@ import { CheckCircle, XCircle, Copy, Check, Trash2, Save } from 'lucide-react';
 import { useProjectContext } from '../contexts/ProjectContext';
 import type { Project, Event } from '../types';
 
+// For API calls — always local backend
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+
+// For webhook URLs shown to users — public ngrok/production URL
 function getBackendUrl(): string {
   if (import.meta.env.VITE_BACKEND_URL) return import.meta.env.VITE_BACKEND_URL as string;
   return `${window.location.protocol}//${window.location.hostname}:3001`;
@@ -190,13 +194,11 @@ export const Settings = () => {
   // Fetch project detail + events for integration status on mount / project change
   useEffect(() => {
     if (!selectedProject) return;
-    const apiBase = getBackendUrl();
-
     const fetchData = async () => {
       try {
         const [detailRes, eventsRes] = await Promise.all([
-          fetch(`${apiBase}/api/projects/${selectedProject.id}`),
-          fetch(`${apiBase}/api/projects/${selectedProject.id}/events`),
+          fetch(`${API_URL}/api/projects/${selectedProject.id}`),
+          fetch(`${API_URL}/api/projects/${selectedProject.id}/events`),
         ]);
 
         if (detailRes.ok) {

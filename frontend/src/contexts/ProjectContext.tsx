@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import type { Project } from '../types';
 
-const API_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 
 const FETCH_HEADERS: HeadersInit = {
   'ngrok-skip-browser-warning': '1',
