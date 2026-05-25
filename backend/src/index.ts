@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './loadEnv'; // must come first — populates process.env from .env.{mode}[.local]
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -12,6 +12,7 @@ import projectsRouter from './routes/projects';
 import projectWebhooksRouter from './routes/projectWebhooks';
 import { initSocketHandlers } from './socket/socketHandler';
 import { initAlertService } from './services/alertService';
+import { initLogJob } from './services/logJobService';
 import { getRecentAlerts } from './models/Alert';
 import { getRecentEvents } from './models/Event';
 import { getTasksFromEvents, getAlertsSummary } from './models/Task';
@@ -19,6 +20,9 @@ import { getTasksFromEvents, getAlertsSummary } from './models/Task';
 const app = express();
 const httpServer = createServer(app);
 
+// CORS origin for the frontend.
+// DEVELOPMENT: http://localhost:5173
+// TODO: Replace with production frontend domain when deploying.
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 
 const io = new Server(httpServer, {
@@ -26,7 +30,8 @@ const io = new Server(httpServer, {
 });
 
 app.use(cors({ origin: frontendUrl }));
-app.use(express.json());
+// Cap webhook payloads at 1 MB to prevent DoS via oversized JSON.
+app.use(express.json({ limit: '1mb' }));
 
 // Per-project webhook routes
 app.use('/api/projects/:id/webhooks', projectWebhooksRouter);
@@ -48,7 +53,8 @@ app.get('/api/alerts', async (_req, res) => {
   try {
     const alerts = await getRecentAlerts(20);
     res.json(alerts);
-  } catch {
+  } catch (err) {
+    console.error('GET /api/alerts failed:', err);
     res.status(500).json({ error: 'Failed to fetch alerts' });
   }
 });
@@ -57,7 +63,8 @@ app.get('/api/events', async (_req, res) => {
   try {
     const events = await getRecentEvents(50);
     res.json(events);
-  } catch {
+  } catch (err) {
+    console.error('GET /api/events failed:', err);
     res.status(500).json({ error: 'Failed to fetch events' });
   }
 });
@@ -66,7 +73,8 @@ app.get('/api/alerts/summary', async (_req, res) => {
   try {
     const summary = await getAlertsSummary();
     res.json(summary);
-  } catch {
+  } catch (err) {
+    console.error('GET /api/alerts/summary failed:', err);
     res.status(500).json({ error: 'Failed to fetch alerts summary' });
   }
 });
@@ -76,7 +84,8 @@ app.get('/api/tasks', async (_req, res) => {
   try {
     const tasks = await getTasksFromEvents();
     res.json(tasks);
-  } catch {
+  } catch (err) {
+    console.error('GET /api/tasks failed:', err);
     res.status(500).json({ error: 'Failed to fetch tasks' });
   }
 });
@@ -88,6 +97,7 @@ const PORT = process.env.PORT || 3001;
 const start = async () => {
   await initDB();
   initAlertService(io);
+  initLogJob();
   httpServer.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
   });

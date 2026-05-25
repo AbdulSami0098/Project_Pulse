@@ -2,11 +2,7 @@ import { useState, useEffect } from 'react';
 import { Zap, Plus, CheckCircle, XCircle, X, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useProjectContext, CreateProjectInput } from '../contexts/ProjectContext';
 import type { Project } from '../types';
-
-function getBackendUrl(): string {
-  if (import.meta.env.VITE_BACKEND_URL) return import.meta.env.VITE_BACKEND_URL as string;
-  return `${window.location.protocol}//${window.location.hostname}:3001`;
-}
+import { API_URL, getWebhookBaseUrl } from '../lib/env';
 
 // ── Webhook URL modal shown after project creation ──────────────────────────
 
@@ -16,7 +12,8 @@ interface WebhookUrlsProps {
 }
 
 const WebhookUrls = ({ project, onClose }: WebhookUrlsProps) => {
-  const base = getBackendUrl();
+  // Public-facing webhook URLs (ngrok in dev, production host in prod).
+  const base = getWebhookBaseUrl();
   const [copied, setCopied] = useState<string | null>(null);
 
   const urls = [
@@ -229,7 +226,7 @@ export const ProjectSelector = () => {
             <p className="text-gray-500 text-sm mt-1">{error}</p>
             <p className="text-gray-600 text-xs mt-1">
               Make sure the backend is running at{' '}
-              <code className="text-gray-400">{import.meta.env.VITE_API_URL ?? 'http://localhost:3001'}</code>
+              <code className="text-gray-400">{API_URL}</code>
             </p>
           </div>
           <button

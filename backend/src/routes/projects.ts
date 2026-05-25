@@ -4,9 +4,21 @@ import { createProject, getAllProjects, getProjectById, updateProject, deletePro
 import { getAlertsByProject } from '../models/Alert';
 import { getEventsByProject, Event } from '../models/Event';
 import { getTasksFromEventsByProject, getAlertsSummaryByProject } from '../models/Task';
+import { getLogsByProject } from '../models/Log';
 import pool from '../db/postgres';
 
 const router = Router();
+
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514';
+
+// ── ID parsing ────────────────────────────────────────────────────────────────
+// `parseInt('1abc')` returns 1, so we use stricter integer validation here to
+// reject IDs like "1abc", "1.5", "" or "-1" with a 400 instead of silently
+// matching the wrong row.
+function parseId(raw: string): number | null {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
 
 // ── Helper: format a raw DB event row into a human-readable context line ──────
 
@@ -68,7 +80,8 @@ router.get('/', async (_req: Request, res: Response) => {
   try {
     const projects = await getAllProjects();
     res.json(projects);
-  } catch {
+  } catch (err) {
+    console.error('GET /api/projects failed:', err);
     res.status(500).json({ error: 'Failed to fetch projects' });
   }
 });
@@ -79,6 +92,7 @@ router.post('/', async (req: Request, res: Response) => {
     res.status(201).json(project);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
+    console.error('POST /api/projects failed:', err);
     if (msg.includes('unique') || msg.includes('duplicate')) {
       res.status(409).json({ error: 'A project with that name already exists' });
     } else {
@@ -88,63 +102,63 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 router.get('/:id', async (req: Request, res: Response) => {
-  try {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) { res.status(400).json({ error: 'Invalid project id' }); return; }
+  const id = parseId(req.params.id);
+  if (id === null) { res.status(400).json({ error: 'Invalid project id' }); return; }
 
+  try {
     const project = await getProjectById(id);
     if (!project) { res.status(404).json({ error: 'Project not found' }); return; }
 
+    // Single query — replaces three separate EXISTS round-trips.
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const [githubRes, jiraRes, slackRes] = await Promise.all([
-      pool.query<{ exists: boolean }>(
-        `SELECT EXISTS(SELECT 1 FROM events WHERE project_id=$1 AND source='github' AND created_at > $2) AS exists`,
-        [id, sevenDaysAgo]
-      ),
-      pool.query<{ exists: boolean }>(
-        `SELECT EXISTS(SELECT 1 FROM events WHERE project_id=$1 AND source='jira' AND created_at > $2) AS exists`,
-        [id, sevenDaysAgo]
-      ),
-      pool.query<{ exists: boolean }>(
-        `SELECT EXISTS(SELECT 1 FROM events WHERE project_id=$1 AND source='slack' AND created_at > $2) AS exists`,
-        [id, sevenDaysAgo]
-      ),
-    ]);
+    const recent = await pool.query<{ source: string }>(
+      `SELECT DISTINCT source
+       FROM events
+       WHERE project_id = $1
+         AND source IN ('github', 'jira', 'slack')
+         AND created_at > $2`,
+      [id, sevenDaysAgo]
+    );
+    const sources = new Set(recent.rows.map((r) => r.source));
 
     res.json({
       ...project,
       integrations: {
-        github: githubRes.rows[0]?.exists ?? false,
-        jira: jiraRes.rows[0]?.exists ?? false,
-        slack: slackRes.rows[0]?.exists ?? false,
+        github: sources.has('github'),
+        jira: sources.has('jira'),
+        slack: sources.has('slack'),
         teams: !!project.teams_webhook,
       },
     });
-  } catch {
+  } catch (err) {
+    console.error(`GET /api/projects/${id} failed:`, err);
     res.status(500).json({ error: 'Failed to fetch project' });
   }
 });
 
 router.put('/:id', async (req: Request, res: Response) => {
-  try {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) { res.status(400).json({ error: 'Invalid project id' }); return; }
+  const id = parseId(req.params.id);
+  if (id === null) { res.status(400).json({ error: 'Invalid project id' }); return; }
 
+  try {
     const project = await updateProject(id, req.body as Parameters<typeof updateProject>[1]);
     if (!project) { res.status(404).json({ error: 'Project not found' }); return; }
     res.json(project);
-  } catch {
+  } catch (err) {
+    console.error(`PUT /api/projects/${id} failed:`, err);
     res.status(500).json({ error: 'Failed to update project' });
   }
 });
 
 router.delete('/:id', async (req: Request, res: Response) => {
+  const id = parseId(req.params.id);
+  if (id === null) { res.status(400).json({ error: 'Invalid project id' }); return; }
+
   try {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) { res.status(400).json({ error: 'Invalid project id' }); return; }
     await deleteProject(id);
     res.status(204).send();
-  } catch {
+  } catch (err) {
+    console.error(`DELETE /api/projects/${id} failed:`, err);
     res.status(500).json({ error: 'Failed to delete project' });
   }
 });
@@ -152,54 +166,111 @@ router.delete('/:id', async (req: Request, res: Response) => {
 // ── Sub-resource routes ───────────────────────────────────────────────────────
 
 router.get('/:id/events', async (req: Request, res: Response) => {
+  const id = parseId(req.params.id);
+  if (id === null) { res.status(400).json({ error: 'Invalid project id' }); return; }
+
   try {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) { res.status(400).json({ error: 'Invalid project id' }); return; }
     const events = await getEventsByProject(id, 50);
     res.json(events);
-  } catch {
+  } catch (err) {
+    console.error(`GET /api/projects/${id}/events failed:`, err);
     res.status(500).json({ error: 'Failed to fetch events' });
   }
 });
 
 router.get('/:id/alerts', async (req: Request, res: Response) => {
+  const id = parseId(req.params.id);
+  if (id === null) { res.status(400).json({ error: 'Invalid project id' }); return; }
+
   try {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) { res.status(400).json({ error: 'Invalid project id' }); return; }
     const alerts = await getAlertsByProject(id, 20);
     res.json(alerts);
-  } catch {
+  } catch (err) {
+    console.error(`GET /api/projects/${id}/alerts failed:`, err);
     res.status(500).json({ error: 'Failed to fetch alerts' });
   }
 });
 
 router.get('/:id/alerts/summary', async (req: Request, res: Response) => {
+  const id = parseId(req.params.id);
+  if (id === null) { res.status(400).json({ error: 'Invalid project id' }); return; }
+
   try {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) { res.status(400).json({ error: 'Invalid project id' }); return; }
     const summary = await getAlertsSummaryByProject(id);
     res.json(summary);
-  } catch {
+  } catch (err) {
+    console.error(`GET /api/projects/${id}/alerts/summary failed:`, err);
     res.status(500).json({ error: 'Failed to fetch alerts summary' });
   }
 });
 
 router.get('/:id/tasks', async (req: Request, res: Response) => {
+  const id = parseId(req.params.id);
+  if (id === null) { res.status(400).json({ error: 'Invalid project id' }); return; }
+
   try {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) { res.status(400).json({ error: 'Invalid project id' }); return; }
     const tasks = await getTasksFromEventsByProject(id);
     res.json(tasks);
-  } catch {
+  } catch (err) {
+    console.error(`GET /api/projects/${id}/tasks failed:`, err);
     res.status(500).json({ error: 'Failed to fetch tasks' });
   }
 });
 
+// ── Logs ──────────────────────────────────────────────────────────────────────
+
+router.get('/:id/logs', async (req: Request, res: Response) => {
+  const id = parseId(req.params.id);
+  if (id === null) { res.status(400).json({ error: 'Invalid project id' }); return; }
+
+  try {
+    const logs = await getLogsByProject(id);
+    res.json(logs);
+  } catch (err) {
+    console.error(`GET /api/projects/${id}/logs failed:`, err);
+    res.status(500).json({ error: 'Failed to fetch logs' });
+  }
+});
+
 // ── Project Intelligence query ────────────────────────────────────────────────
+//
+// Rate limited per-IP to protect against credit-drain abuse. This endpoint
+// calls the Anthropic API on every request which bills directly to your
+// account.
+// TODO: Replace with real auth + per-user quotas before exposing publicly.
+
+const QUERY_RATE_LIMIT_PER_MIN = 10;
+const queryHits = new Map<string, { count: number; resetAt: number }>();
+
+function rateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = queryHits.get(ip);
+  if (!entry || entry.resetAt < now) {
+    queryHits.set(ip, { count: 1, resetAt: now + 60_000 });
+    return false;
+  }
+  entry.count++;
+  return entry.count > QUERY_RATE_LIMIT_PER_MIN;
+}
+
+function isApiKeyMissing(key: string): boolean {
+  // A real Anthropic key looks like `sk-ant-...`. Anything else is either
+  // unset or a placeholder copied straight from .env.example.
+  if (!key) return true;
+  if (key.toLowerCase().includes('your_')) return true;
+  if (key.length < 20) return true;
+  return false;
+}
 
 router.post('/:id/query', async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) { res.status(400).json({ error: 'Invalid project id' }); return; }
+  const id = parseId(req.params.id);
+  if (id === null) { res.status(400).json({ error: 'Invalid project id' }); return; }
+
+  const ip = (req.ip || req.socket.remoteAddress || 'unknown').toString();
+  if (rateLimited(ip)) {
+    res.status(429).json({ error: 'rate_limited', message: 'Too many requests, slow down.' });
+    return;
+  }
 
   const { question } = req.body as { question?: string };
   if (!question?.trim()) {
@@ -207,9 +278,8 @@ router.post('/:id/query', async (req: Request, res: Response) => {
     return;
   }
 
-  // Detect missing / placeholder API key before making the network call
   const apiKey = process.env.ANTHROPIC_API_KEY ?? '';
-  if (!apiKey || apiKey === 'your_api_key_here' || apiKey.startsWith('your_')) {
+  if (isApiKeyMissing(apiKey)) {
     res.json({ answer: null, error: 'api_key_missing' });
     return;
   }
@@ -225,7 +295,7 @@ router.post('/:id/query', async (req: Request, res: Response) => {
     const client = new Anthropic({ apiKey });
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: ANTHROPIC_MODEL,
       max_tokens: 1024,
       system:
         'You are a project intelligence assistant. You have access to all events ' +

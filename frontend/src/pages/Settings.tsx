@@ -2,15 +2,7 @@ import { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, Copy, Check, Trash2, Save } from 'lucide-react';
 import { useProjectContext } from '../contexts/ProjectContext';
 import type { Project, Event } from '../types';
-
-// For API calls — always local backend
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
-
-// For webhook URLs shown to users — public ngrok/production URL
-function getBackendUrl(): string {
-  if (import.meta.env.VITE_BACKEND_URL) return import.meta.env.VITE_BACKEND_URL as string;
-  return `${window.location.protocol}//${window.location.hostname}:3001`;
-}
+import { API_URL, getWebhookBaseUrl } from '../lib/env';
 
 function formatLastReceived(dateStr: string): string {
   const diffMs = Date.now() - new Date(dateStr).getTime();
@@ -86,7 +78,7 @@ interface TeamsCardProps {
 }
 
 const TeamsCard = ({ projectId, currentWebhook, lastReceived, onSave }: TeamsCardProps) => {
-  const base = getBackendUrl();
+  const base = getWebhookBaseUrl();
   const incomingUrl = `${base}/api/projects/${projectId}/webhooks/teams`;
   const [value, setValue] = useState(currentWebhook ?? '');
   const [saving, setSaving] = useState(false);
@@ -181,7 +173,7 @@ export const Settings = () => {
   const [saved, setSaved] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
-  const base = getBackendUrl();
+  const base = getWebhookBaseUrl();
 
   useEffect(() => {
     if (selectedProject) {
@@ -237,7 +229,7 @@ export const Settings = () => {
   };
 
   const handleSaveTeams = async (webhook: string) => {
-    await updateProject(project.id, { teams_webhook: webhook || null as unknown as string });
+    await updateProject(project.id, { teams_webhook: webhook || null });
     await refreshProjects();
   };
 

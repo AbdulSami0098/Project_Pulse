@@ -44,8 +44,31 @@ export const initDB = async (): Promise<void> => {
     CREATE INDEX IF NOT EXISTS idx_events_project_id ON events(project_id);
     CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
+    -- Composite indexes for hot read paths:
+    --   getEventsByProject orders by created_at within a project
+    --   getProjectById integration check filters by (project_id, source, created_at)
+    CREATE INDEX IF NOT EXISTS idx_events_project_created
+      ON events(project_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_events_project_source_created
+      ON events(project_id, source, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_alerts_project_id ON alerts(project_id);
     CREATE INDEX IF NOT EXISTS idx_alerts_created_at ON alerts(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_alerts_project_created
+      ON alerts(project_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS logs (
+      id SERIAL PRIMARY KEY,
+      project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+      level VARCHAR(20) NOT NULL CHECK (level IN ('info', 'warning', 'error')),
+      source VARCHAR(100) NOT NULL,
+      message TEXT NOT NULL,
+      details TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_logs_project_id ON logs(project_id);
+    CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_logs_project_created ON logs(project_id, created_at DESC);
   `);
 
   // Migrations for existing installations

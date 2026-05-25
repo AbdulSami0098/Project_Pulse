@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Radio, Bell, Settings, Zap, ChevronDown, Plus, LogOut, Sparkles, ScrollText } from 'lucide-react';
+import { LayoutDashboard, Radio, Bell, Settings, Zap, ChevronDown, Plus, LogOut, Sparkles } from 'lucide-react';
 import { useProjectContext } from '../../contexts/ProjectContext';
 
 const navItems = [
@@ -8,7 +8,6 @@ const navItems = [
   { to: '/feed', label: 'Developer Feed', icon: Radio },
   { to: '/alerts', label: 'Risk Indicators', icon: Bell },
   { to: '/intelligence', label: 'Intelligence', icon: Sparkles },
-  { to: '/logs', label: 'Logs', icon: ScrollText },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 

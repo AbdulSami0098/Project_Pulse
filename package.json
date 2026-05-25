@@ -1,0 +1,23 @@
+{
+  "name": "project-pulse",
+  "version": "1.0.0",
+  "description": "AI-powered project intelligence for enterprise software teams. Connects to GitHub, Jira, and Slack — detects risks and broadcasts real-time alerts before problems become disasters.",
+  "main": "test-app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AbdulSami0098/Project_Pulse.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/AbdulSami0098/Project_Pulse/issues"
+  },
+  "homepage": "https://github.com/AbdulSami0098/Project_Pulse#readme",
+  "devDependencies": {
+    "playwright": "^1.60.0"
+  }
+}

@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { Sparkles, Send, AlertTriangle, User, Bot } from 'lucide-react';
 import { useProjectContext } from '../contexts/ProjectContext';
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+import { API_URL } from '../lib/env';
 
 const SUGGESTED = [
   'Who moved the last Jira ticket?',

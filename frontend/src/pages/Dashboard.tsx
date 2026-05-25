@@ -12,7 +12,7 @@ interface DashboardProps {
 }
 
 const SUMMARY_TILES = (s: AlertsSummary) => [
-  { label: 'Total Alerts', value: s.total, color: 'text-white' },
+  { label: 'Total Risk Indicators', value: s.total, color: 'text-white' },
   { label: 'High Severity', value: s.high, color: 'text-red-400' },
   { label: 'Medium Severity', value: s.medium, color: 'text-yellow-400' },
   { label: 'Low Severity', value: s.low, color: 'text-blue-400' },
@@ -51,7 +51,6 @@ export const Dashboard = ({ alerts, tasks, tasksLoading, analysis, alertsSummary
       <div className="bg-gray-900 rounded-xl border border-gray-800 p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-white font-semibold text-lg">Activity Summary</h2>
-          <span className="text-gray-600 text-xs">from /api/alerts/summary</span>
         </div>
         <div className="grid grid-cols-2 gap-3">
           {SUMMARY_TILES(alertsSummary).map(({ label, value, color }) => (

@@ -5,6 +5,7 @@ import { Dashboard } from './pages/Dashboard';
 import { DeveloperFeed } from './pages/DeveloperFeed';
 import { Settings } from './pages/Settings';
 import { Intelligence } from './pages/Intelligence';
+import { Logs } from './pages/Logs';
 import { ProjectSelector } from './pages/ProjectSelector';
 import { AlertsFeed } from './components/dashboard/AlertsFeed';
 import { ProjectProvider, useProjectContext } from './contexts/ProjectContext';
@@ -12,7 +13,7 @@ import { useSocket } from './hooks/useSocket';
 
 const MainApp = () => {
   const { selectedProject } = useProjectContext();
-  const { connected, alerts, events, tasks, tasksLoading, analysis, alertsSummary, requestAnalysis } =
+  const { alerts, events, tasks, tasksLoading, analysis, alertsSummary, requestAnalysis } =
     useSocket(selectedProject?.id ?? null);
 
   if (!selectedProject) {
@@ -23,7 +24,7 @@ const MainApp = () => {
     <div className="flex h-screen bg-gray-950 overflow-hidden">
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0">
-        <Header connected={connected} projectName={selectedProject.name} onRequestAnalysis={requestAnalysis} />
+        <Header projectName={selectedProject.name} onRequestAnalysis={requestAnalysis} />
         <main className="flex-1 overflow-hidden flex flex-col">
           <Routes>
             <Route
@@ -45,8 +46,8 @@ const MainApp = () => {
                 <div className="flex-1 overflow-auto p-6">
                   <div className="max-w-3xl">
                     <div className="mb-6">
-                      <h2 className="text-white font-semibold text-xl">All Alerts</h2>
-                      <p className="text-gray-500 text-sm mt-1">Complete history of AI-generated alerts</p>
+                      <h2 className="text-white font-semibold text-xl">Risk Indicators</h2>
+                      <p className="text-gray-500 text-sm mt-1">Complete history of AI-generated risk indicators</p>
                     </div>
                     <AlertsFeed alerts={alerts} />
                   </div>
@@ -54,6 +55,7 @@ const MainApp = () => {
               }
             />
             <Route path="/intelligence" element={<Intelligence />} />
+            <Route path="/logs" element={<Logs />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/projects" element={<ProjectSelector />} />
             <Route path="*" element={<Navigate to="/" replace />} />

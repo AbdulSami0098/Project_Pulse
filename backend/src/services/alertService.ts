@@ -2,6 +2,7 @@ import { Server } from 'socket.io';
 import { getEventsByProject, getRecentEvents } from '../models/Event';
 import { createAlert, getAlertsByProject, getRecentAlerts } from '../models/Alert';
 import { getAllProjects, getProjectById } from '../models/Project';
+import { createLog } from '../models/Log';
 import { analyzeEvents } from './aiService';
 import { sendTeamsAlert } from './teamsService';
 
@@ -25,10 +26,16 @@ export const runAllProjectAlertCycles = async (): Promise<void> => {
   if (!io) return;
   try {
     const projects = await getAllProjects();
-    for (const project of projects) {
-      if (project.status === 'active') {
-        await runAlertCycleForProject(project.id);
-      }
+    // Run cycles concurrently but isolate failures — one slow/failing project
+    // must not block the rest. runAlertCycleForProject already has its own
+    // try/catch so allSettled just gives us a clean summary.
+    const active = projects.filter((p) => p.status === 'active');
+    const results = await Promise.allSettled(
+      active.map((p) => runAlertCycleForProject(p.id))
+    );
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    if (failed > 0) {
+      console.error(`Alert cycle: ${failed}/${active.length} project cycles rejected`);
     }
   } catch (err) {
     console.error('Alert cycle (all projects) failed:', err);
@@ -70,7 +77,9 @@ export const runAlertCycleForProject = async (projectId: number): Promise<void> 
 
     console.log(`Alert cycle complete for project ${projectId} — ${analysis.risks.length} risks detected`);
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     console.error(`Alert cycle failed for project ${projectId}:`, err);
+    createLog(projectId, 'error', 'alert-cycle', 'Risk indicator generation failed', message).catch(() => {});
   }
 };
 

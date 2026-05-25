@@ -42,7 +42,7 @@ interface AlertsFeedProps {
 export const AlertsFeed = ({ alerts }: AlertsFeedProps) => (
   <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 flex flex-col h-full">
     <div className="flex items-center justify-between mb-4">
-      <h2 className="text-white font-semibold text-lg">AI Alerts</h2>
+      <h2 className="text-white font-semibold text-lg">Risk Indicators</h2>
       {alerts.length > 0 && (
         <span className="text-xs text-gray-500">{alerts.length} total</span>
       )}
@@ -53,7 +53,7 @@ export const AlertsFeed = ({ alerts }: AlertsFeedProps) => (
         <div className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center mb-3">
           <Info className="w-5 h-5 text-gray-600" />
         </div>
-        <p className="text-gray-500 text-sm">No alerts yet</p>
+        <p className="text-gray-500 text-sm">No risk indicators yet</p>
         <p className="text-gray-600 text-xs mt-1">AI analysis runs every 5 minutes</p>
       </div>
     ) : (

@@ -58,6 +58,12 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
+        # In production these two values are usually identical (your public
+        # backend URL). For local docker-compose dev we use localhost for both:
+        # the browser reaches the backend at localhost:3001 directly, and
+        # webhook URLs shown to users are not exercised in this setup.
+        # TODO: Override both with your real public URL when deploying.
+        VITE_API_URL: http://localhost:3001
         VITE_BACKEND_URL: http://localhost:3001
     restart: unless-stopped
     ports:

@@ -1,11 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import type { Project } from '../types';
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
-
-const FETCH_HEADERS: HeadersInit = {
-  'ngrok-skip-browser-warning': '1',
-};
+import { API_URL, API_HEADERS as FETCH_HEADERS } from '../lib/env';
 
 interface ProjectContextValue {
   projects: Project[];
@@ -14,7 +9,7 @@ interface ProjectContextValue {
   clearProject: () => void;
   refreshProjects: () => Promise<void>;
   createProject: (data: CreateProjectInput) => Promise<Project>;
-  updateProject: (id: number, data: Partial<CreateProjectInput & { status: 'active' | 'inactive' }>) => Promise<Project>;
+  updateProject: (id: number, data: UpdateProjectInput) => Promise<Project>;
   deleteProject: (id: number) => Promise<void>;
   loading: boolean;
   error: string | null;
@@ -28,6 +23,17 @@ export interface CreateProjectInput {
   slack_webhook?: string;
   teams_webhook?: string;
 }
+
+// Updates allow `null` to explicitly clear an optional field.
+export type UpdateProjectInput = Partial<{
+  name: string;
+  description: string | null;
+  github_repo: string | null;
+  jira_url: string | null;
+  slack_webhook: string | null;
+  teams_webhook: string | null;
+  status: 'active' | 'inactive';
+}>;
 
 const ProjectContext = createContext<ProjectContextValue>({
   projects: [],
@@ -138,7 +144,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
 
   const updateProject = useCallback(async (
     id: number,
-    data: Partial<CreateProjectInput & { status: 'active' | 'inactive' }>
+    data: UpdateProjectInput
   ): Promise<Project> => {
     const res = await fetch(`${API_URL}/api/projects/${id}`, {
       method: 'PUT',

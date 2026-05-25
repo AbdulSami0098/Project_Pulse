@@ -1,7 +1,7 @@
 import { Server, Socket } from 'socket.io';
-import { getAlertsByProject, getRecentAlerts } from '../models/Alert';
-import { getEventsByProject, getRecentEvents } from '../models/Event';
-import { getTasksFromEventsByProject, getTasksFromEvents } from '../models/Task';
+import { getAlertsByProject } from '../models/Alert';
+import { getEventsByProject } from '../models/Event';
+import { getTasksFromEventsByProject } from '../models/Task';
 import { runAlertCycleForProject, runAlertCycle } from '../services/alertService';
 
 export const initSocketHandlers = (io: Server): void => {
@@ -45,17 +45,10 @@ export const initSocketHandlers = (io: Server): void => {
       }
     });
 
-    // Legacy: send initial data without project scoping (for backward compatibility)
-    try {
-      const [alerts, events, tasks] = await Promise.all([
-        getRecentAlerts(20),
-        getRecentEvents(50),
-        getTasksFromEvents(),
-      ]);
-      socket.emit('initial_data', { alerts, events, tasks });
-    } catch (err) {
-      console.error('Error sending initial data:', err);
-    }
+    // Note: we deliberately do NOT emit any global `initial_data` on connect.
+    // Clients must call `join_project` first; that handler emits scoped data.
+    // The previous global emit caused a race where an empty array would arrive
+    // before `join_project` completed and wipe the HTTP-fetched initial state.
 
     socket.on('disconnect', () => {
       console.log(`Client disconnected: ${socket.id}`);

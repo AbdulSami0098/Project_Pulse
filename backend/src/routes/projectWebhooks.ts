@@ -4,20 +4,29 @@ import { createEvent } from '../models/Event';
 import { handlePushEvent, handlePullRequestEvent, handleBranchEvent } from '../services/githubService';
 import { handleIssueEvent } from '../services/jiraService';
 
+// SECURITY TODO: None of these webhook routes verify the sender. Before going
+// to production, add HMAC verification per source:
+//   - GitHub:  validate `X-Hub-Signature-256` against a per-project secret.
+//   - Slack:   validate `X-Slack-Signature` + `X-Slack-Request-Timestamp`.
+//   - Jira:    Atlassian doesn't sign by default — use a secret path token.
+//   - Teams:   Bot Framework JWT validation if using the channel connector.
+// Until then, anyone who knows the URL can inject fake events.
+
 const router = Router({ mergeParams: true });
 
 async function resolveProject(req: Request, res: Response): Promise<number | null> {
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) {
+  const raw = Number(req.params.id);
+  // Reject "1abc", "1.5", "-1", "" — stricter than parseInt.
+  if (!Number.isInteger(raw) || raw <= 0) {
     res.status(400).json({ error: 'Invalid project id' });
     return null;
   }
-  const project = await getProjectById(id);
+  const project = await getProjectById(raw);
   if (!project) {
     res.status(404).json({ error: 'Project not found' });
     return null;
   }
-  return id;
+  return raw;
 }
 
 router.post('/github', async (req: Request, res: Response) => {

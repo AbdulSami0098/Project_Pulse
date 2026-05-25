@@ -1,21 +1,17 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import type { Alert, Event, Task, AlertsSummary, AnalysisUpdate } from '../types';
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+import { API_URL, API_HEADERS } from '../lib/env';
 
 const EMPTY_SUMMARY: AlertsSummary = { total: 0, high: 0, medium: 0, low: 0 };
 
 async function apiFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    headers: { 'ngrok-skip-browser-warning': '1' },
-  });
+  const res = await fetch(`${API_URL}${path}`, { headers: API_HEADERS });
   if (!res.ok) throw new Error(`${path} → ${res.status}`);
   return res.json() as Promise<T>;
 }
 
 export const useSocket = (projectId: number | null) => {
-  const [connected, setConnected] = useState(false);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -61,13 +57,10 @@ export const useSocket = (projectId: number | null) => {
       socketRef.current = socket;
 
       socket.on('connect', () => {
-        setConnected(true);
         if (currentProjectRef.current !== null) {
           socket!.emit('join_project', { project_id: currentProjectRef.current });
         }
       });
-
-      socket.on('disconnect', () => setConnected(false));
 
       socket.on('initial_data', ({ alerts: a, events: e, tasks: t }: {
         alerts: Alert[]; events: Event[]; tasks: Task[];
@@ -122,9 +115,11 @@ export const useSocket = (projectId: number | null) => {
     };
   }, [projectId]);
 
-  // Disconnect socket on unmount
+  // Disconnect socket on unmount. `removeAllListeners` first guards against
+  // listeners surviving across HMR reloads or strict-mode double-mount.
   useEffect(() => {
     return () => {
+      socketRef.current?.removeAllListeners();
       socketRef.current?.disconnect();
       socketRef.current = null;
     };
@@ -134,5 +129,5 @@ export const useSocket = (projectId: number | null) => {
     socketRef.current?.emit('request_analysis', { project_id: currentProjectRef.current });
   }, []);
 
-  return { connected, alerts, events, tasks, tasksLoading, analysis, alertsSummary, requestAnalysis };
+  return { alerts, events, tasks, tasksLoading, analysis, alertsSummary, requestAnalysis };
 };
